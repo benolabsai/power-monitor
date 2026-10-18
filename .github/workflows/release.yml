@@ -1,0 +1,79 @@
+name: Build & Publish Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Packaging Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            debhelper \
+            dh-python \
+            devscripts \
+            dput \
+            gnupg \
+            python3-all \
+            python3-setuptools
+
+      - name: Configure GPG & Import Signing Key
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+        run: |
+          mkdir -p ~/.gnupg
+          chmod 700 ~/.gnupg
+          echo "use-agent" >> ~/.gnupg/gpg.conf
+          echo "pinentry-mode loopback" >> ~/.gnupg/gpg.conf
+          echo "allow-loopback-pinentry" >> ~/.gnupg/gpg-agent.conf
+          gpgconf --reload gpg-agent
+
+          # Import private key
+          echo "$GPG_PRIVATE_KEY" | gpg --batch --import
+
+          # Determine GPG Key ID
+          KEY_ID=$(gpg --list-secret-keys --with-colons | grep '^sec:' | cut -d: -f5 | tail -n 1)
+          echo "Detected GPG Key ID: $KEY_ID"
+          echo "GPG_KEY_ID=$KEY_ID" >> $GITHUB_ENV
+
+      - name: Build Binary Debian Package (.deb)
+        run: |
+          dpkg-buildpackage -us -uc -b
+          mkdir -p dist
+          cp ../power-monitor_*.deb dist/
+
+      - name: Build & Sign Debian Source Package
+        env:
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+        run: |
+          if [ -n "$GPG_PASSPHRASE" ]; then
+            debuild -S -sa -k"$GPG_KEY_ID" -p"gpg --batch --no-tty --pinentry-mode loopback --passphrase \"$GPG_PASSPHRASE\""
+          else
+            debuild -S -sa -k"$GPG_KEY_ID" -p"gpg --batch --no-tty --pinentry-mode loopback"
+          fi
+
+      - name: Upload Source Package to Launchpad PPA
+        run: |
+          CHANGES_FILE=$(ls -1 ../power-monitor_*_source.changes | head -n 1)
+          echo "Uploading $CHANGES_FILE to ppa:benolabs/ppa..."
+          dput ppa:benolabs/ppa "$CHANGES_FILE"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.deb
+          generate_release_notes: true
