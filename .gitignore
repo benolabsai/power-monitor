@@ -1,0 +1,13 @@
+__pycache__/
+*.py[cod]
+*$py.class
+build/
+dist/
+*.egg-info/
+.pybuild/
+debian/.debhelper/
+debian/debhelper-build-stamp
+debian/files
+debian/power-monitor/
+debian/power-monitor.substvars
+debian/*.log

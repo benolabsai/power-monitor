@@ -1,0 +1,9 @@
+power-monitor (1.0.0-1) resolute; urgency=medium
+
+  * Initial community release.
+  * Native GTK3 interface with horizontal-only Cairo vector charts.
+  * AyatanaAppIndicator top-panel live telemetry plugin.
+  * DMI motherboard database and heuristic 12V rail auto-detection.
+  * On-demand crash-resilient CSV session recording.
+
+ -- Beno Labs <support@benolabs.ai>  Sun, 18 Oct 2026 07:40:00 -0400

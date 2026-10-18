@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f172a"/>
+      <stop offset="100%" stop-color="#1e293b"/>
+    </linearGradient>
+    <linearGradient id="boltGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8"/>
+      <stop offset="50%" stop-color="#818cf8"/>
+      <stop offset="100%" stop-color="#c084fc"/>
+    </linearGradient>
+    <linearGradient id="ringGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.8"/>
+      <stop offset="100%" stop-color="#22c55e" stop-opacity="0.8"/>
+    </linearGradient>
+  </defs>
+  
+  <!-- Base Squircle -->
+  <rect x="8" y="8" width="112" height="112" rx="28" fill="url(#bgGrad)" stroke="#334155" stroke-width="2"/>
+  
+  <!-- Outer Gauge Ring -->
+  <circle cx="64" cy="64" r="44" fill="none" stroke="#334155" stroke-width="5" stroke-dasharray="6 4"/>
+  <path d="M 33 88 A 44 44 0 1 1 95 88" fill="none" stroke="url(#ringGrad)" stroke-width="6" stroke-linecap="round"/>
+  
+  <!-- Lightning Bolt -->
+  <path d="M 69 26 L 41 66 L 63 66 L 55 102 L 87 58 L 65 58 Z" fill="url(#boltGrad)" filter="drop-shadow(0px 3px 6px rgba(56, 189, 248, 0.45))"/>
+</svg>

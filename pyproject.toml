@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "power-monitor"
+version = "1.0.0"
+description = "Universal Hardware Power & Voltage Telemetry Monitor with Desktop Panel Indicator"
+readme = "README.md"
+requires-python = ">=3.8"
+license = {text = "GPL-3.0-or-later"}
+authors = [
+    {name = "Beno Labs", email = "support@benolabs.ai"}
+]
+keywords = ["hardware", "power", "gpu", "voltage", "telemetry", "atx", "sensors"]
+
+[project.scripts]
+power-monitor = "power_monitor.main:main"

@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=Power & Voltage Monitor
+Comment=Real-Time ATX Voltage Stability, Multi-GPU Power Telemetry, and Desktop Panel Indicator
+Exec=power-monitor
+Icon=power-monitor
+Terminal=false
+Type=Application
+Categories=System;Monitor;HardwareSettings;
+Keywords=power;voltage;gpu;sensors;atx;telemetry;wattage;nvidia;amd;
+StartupNotify=true

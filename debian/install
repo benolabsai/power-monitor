@@ -1,0 +1,4 @@
+data/power-monitor.desktop usr/share/applications/
+data/icons/power-monitor.svg usr/share/icons/hicolor/scalable/apps/
+data/power-monitor.service lib/systemd/system/
+data/99-power-monitor-rapl.rules lib/udev/rules.d/

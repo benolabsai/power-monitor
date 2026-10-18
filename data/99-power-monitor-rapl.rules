@@ -1,0 +1,3 @@
+# Allow non-root users to read CPU RAPL energy counters for power monitoring
+KERNEL=="intel-rapl*", SUBSYSTEM=="powercap", ACTION=="add|change", ATTR{energy_uj}!="", MODE="0444"
+SUBSYSTEM=="powercap", KERNEL=="intel-rapl*", ACTION=="add|change", RUN+="/bin/chmod 0444 /sys/class/powercap/%k/energy_uj"

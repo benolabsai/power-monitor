@@ -1,0 +1,27 @@
+Source: power-monitor
+Section: utils
+Priority: optional
+Maintainer: Beno Labs <support@benolabs.ai>
+Build-Depends: debhelper-compat (= 13), python3-all, python3-setuptools, dh-python
+Standards-Version: 4.6.2
+Homepage: https://github.com/benolabs/power-monitor
+
+Package: power-monitor
+Architecture: all
+Depends: ${python3:Depends},
+         ${misc:Depends},
+         python3-gi,
+         gir1.2-gtk-3.0,
+         gir1.2-ayatanaappindicator3-0.1,
+         python3-cairo,
+         lm-sensors
+Recommends: pciutils
+Description: Hardware Power & Voltage Telemetry Monitor with Desktop Panel Indicator
+ Real-time hardware telemetry tool designed for PC builders, overclockers,
+ and multi-GPU AI/rendering workstations. Features:
+  * Native GTK3 and Cairo anti-aliased dual real-time charts.
+  * Live ATX +12V rail voltage stability monitoring (11.4V - 12.6V margin).
+  * Per-GPU power draw (NVIDIA, AMD Radeon, Intel Arc) and combined wattage.
+  * Seamless Ubuntu desktop top-panel indicator via AyatanaAppIndicator.
+  * Built-in motherboard Super I/O DMI database and heuristic 12V detector.
+  * Crash-resilient session CSV logging with zero-loss flushing.
