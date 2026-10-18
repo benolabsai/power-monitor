@@ -64,10 +64,20 @@ jobs:
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
         run: |
           if [ -n "$GPG_PASSPHRASE" ]; then
-            debuild -d -S -sa -k"$GPG_KEY_ID" -p"gpg --batch --no-tty --pinentry-mode loopback --passphrase \"$GPG_PASSPHRASE\""
+            printf "%s" "$GPG_PASSPHRASE" > /tmp/gpg-pass
+            cat << 'GPG_EOF' > /tmp/ci-gpg.sh
+#!/bin/bash
+exec /usr/bin/gpg --batch --no-tty --pinentry-mode loopback --passphrase-file /tmp/gpg-pass "$@"
+GPG_EOF
           else
-            debuild -d -S -sa -k"$GPG_KEY_ID" -p"gpg --batch --no-tty --pinentry-mode loopback"
+            cat << 'GPG_EOF' > /tmp/ci-gpg.sh
+#!/bin/bash
+exec /usr/bin/gpg --batch --no-tty --pinentry-mode loopback "$@"
+GPG_EOF
           fi
+          chmod +x /tmp/ci-gpg.sh
+          debuild -d -S -k"$GPG_KEY_ID" -p/tmp/ci-gpg.sh
+          rm -f /tmp/gpg-pass /tmp/ci-gpg.sh
 
       - name: Upload Source Package to Launchpad PPA
         run: |
