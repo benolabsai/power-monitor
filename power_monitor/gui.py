@@ -13,6 +13,7 @@ gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk, Gdk, Gio, GLib
 import cairo
 
+from power_monitor import __version__
 from power_monitor.database import get_dmi_info
 
 GTK_THEME_CSS = b"""
@@ -24,6 +25,15 @@ window {
     border: 1px solid alpha(@theme_fg_color, 0.12);
     border-radius: 8px;
     padding: 8px;
+}
+.version-badge {
+    font-size: 8pt;
+    font-weight: bold;
+    padding: 2px 8px;
+    border-radius: 6px;
+    background-color: alpha(@theme_selected_bg_color, 0.15);
+    color: @theme_selected_bg_color;
+    border: 1px solid alpha(@theme_selected_bg_color, 0.35);
 }
 .hero-card {
     background-color: alpha(@theme_selected_bg_color, 0.08);
@@ -166,7 +176,7 @@ def get_cpu_model():
 
 class MainWindow(Gtk.Window):
     def __init__(self, hide_on_close: bool = False, on_quit_callback: Optional[Callable] = None):
-        super().__init__(title="Hardware Power & Voltage Monitor")
+        super().__init__(title=f"Hardware Power & Voltage Monitor v{__version__}")
         self.set_default_size(880, 760)
         self.set_position(Gtk.WindowPosition.CENTER)
         self.hide_on_close = hide_on_close
@@ -245,9 +255,17 @@ class MainWindow(Gtk.Window):
         header_box.set_hexpand(True)
         main_box.pack_start(header_box, False, False, 0)
 
+        title_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        title_row.set_hexpand(True)
+        header_box.pack_start(title_row, False, False, 0)
+
         title_lbl = Gtk.Label(xalign=0)
         title_lbl.set_markup("<b><big>⚡ Hardware Power &amp; Voltage Monitor</big></b>")
-        header_box.pack_start(title_lbl, False, False, 0)
+        title_row.pack_start(title_lbl, False, False, 0)
+
+        ver_badge = Gtk.Label(label=f"v{__version__}", xalign=0)
+        ver_badge.get_style_context().add_class("version-badge")
+        title_row.pack_start(ver_badge, False, False, 0)
 
         self.sub_lbl = Gtk.Label(xalign=0)
         self.sub_lbl.set_markup(f"<small>{GLib.markup_escape_text(self.mb_desc)} • {GLib.markup_escape_text(self.cpu_desc)}</small>")

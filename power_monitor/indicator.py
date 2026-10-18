@@ -9,6 +9,7 @@ gi.require_version("Gtk", "3.0")
 gi.require_version("AyatanaAppIndicator3", "0.1")
 from gi.repository import Gtk, AyatanaAppIndicator3
 from typing import Optional, Callable
+from power_monitor import __version__
 
 class PowerMonitorIndicator:
     def __init__(
@@ -26,6 +27,7 @@ class PowerMonitorIndicator:
             AyatanaAppIndicator3.IndicatorCategory.HARDWARE
         )
         self.indicator.set_status(AyatanaAppIndicator3.IndicatorStatus.ACTIVE)
+        self.indicator.set_title(f"Power Monitor v{__version__}")
         self.indicator.set_label("⚡ 12.00V | 000W", "⚡ 12.00V | 999W")
 
         self.setup_menu()
@@ -34,7 +36,7 @@ class PowerMonitorIndicator:
         self.menu = Gtk.Menu()
 
         # Header title
-        self.item_title = Gtk.MenuItem(label="⚡ Power & Voltage Monitor")
+        self.item_title = Gtk.MenuItem(label=f"⚡ Power & Voltage Monitor v{__version__}")
         self.item_title.set_sensitive(False)
         self.menu.append(self.item_title)
 

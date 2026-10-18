@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.2] - 2026-10-18
+
+### Added
+- **Version Number Display on GUI** — Integrated prominent release version badge (`v1.0.2`) directly into the GTK3 application header bar alongside the main title, with dynamic theme-aware styling.
+- **Window Title Branding** — Appended release version to the primary dashboard window title (`Hardware Power & Voltage Monitor v1.0.2`).
+- **Panel Indicator Branding** — Integrated release version number into the Ayatana top-panel dropdown menu title (`⚡ Power & Voltage Monitor v1.0.2`) and system desktop metadata.
+
+---
+
 ## [1.0.1] - 2026-10-18
 
 ### Added

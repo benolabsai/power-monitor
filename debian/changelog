@@ -1,3 +1,10 @@
+power-monitor (1.0.2) resolute; urgency=medium
+
+  * Display application version badge in the desktop GUI header.
+  * Append release version number to window title and top-panel indicator dropdown.
+
+ -- Beno Labs <rla3rd@gmail.com>  Sun, 18 Oct 2026 14:59:00 -0400
+
 power-monitor (1.0.1) resolute; urgency=medium
 
   * Add threshold-driven immediate event logging on +12V rail sags (<11.40V, <11.00V).

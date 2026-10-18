@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-VERSION="1.0.1"
+VERSION="1.0.2"
 PKG_DIR="build/deb_staging"
 
 echo "==> Preparing Debian package staging directory..."
@@ -33,7 +33,7 @@ cp data/99-power-monitor-rapl.rules "${PKG_DIR}/lib/udev/rules.d/"
 # 4. DEBIAN/control
 cat << 'CTRL' > "${PKG_DIR}/DEBIAN/control"
 Package: power-monitor
-Version: 1.0.1-1
+Version: 1.0.2-1
 Section: utils
 Priority: optional
 Architecture: all
