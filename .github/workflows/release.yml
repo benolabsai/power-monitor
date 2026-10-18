@@ -65,15 +65,11 @@ jobs:
         run: |
           if [ -n "$GPG_PASSPHRASE" ]; then
             printf "%s" "$GPG_PASSPHRASE" > /tmp/gpg-pass
-            cat << 'GPG_EOF' > /tmp/ci-gpg.sh
-#!/bin/bash
-exec /usr/bin/gpg --batch --no-tty --pinentry-mode loopback --passphrase-file /tmp/gpg-pass "$@"
-GPG_EOF
+            echo '#!/bin/bash' > /tmp/ci-gpg.sh
+            echo 'exec /usr/bin/gpg --batch --no-tty --pinentry-mode loopback --passphrase-file /tmp/gpg-pass "$@"' >> /tmp/ci-gpg.sh
           else
-            cat << 'GPG_EOF' > /tmp/ci-gpg.sh
-#!/bin/bash
-exec /usr/bin/gpg --batch --no-tty --pinentry-mode loopback "$@"
-GPG_EOF
+            echo '#!/bin/bash' > /tmp/ci-gpg.sh
+            echo 'exec /usr/bin/gpg --batch --no-tty --pinentry-mode loopback "$@"' >> /tmp/ci-gpg.sh
           fi
           chmod +x /tmp/ci-gpg.sh
           debuild -d -S -k"$GPG_KEY_ID" -p/tmp/ci-gpg.sh
