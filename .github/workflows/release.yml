@@ -22,6 +22,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
+            build-essential \
             debhelper \
             dh-python \
             devscripts \
@@ -52,18 +53,20 @@ jobs:
 
       - name: Build Binary Debian Package (.deb)
         run: |
-          dpkg-buildpackage -us -uc -b
+          dpkg-buildpackage -d -us -uc -b
           mkdir -p dist
           cp ../power-monitor_*.deb dist/
 
       - name: Build & Sign Debian Source Package
         env:
+          DEBEMAIL: rla3rd@gmail.com
+          DEBFULLNAME: "Richard Albright"
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
         run: |
           if [ -n "$GPG_PASSPHRASE" ]; then
-            debuild -S -sa -k"$GPG_KEY_ID" -p"gpg --batch --no-tty --pinentry-mode loopback --passphrase \"$GPG_PASSPHRASE\""
+            debuild -d -S -sa -k"$GPG_KEY_ID" -p"gpg --batch --no-tty --pinentry-mode loopback --passphrase \"$GPG_PASSPHRASE\""
           else
-            debuild -S -sa -k"$GPG_KEY_ID" -p"gpg --batch --no-tty --pinentry-mode loopback"
+            debuild -d -S -sa -k"$GPG_KEY_ID" -p"gpg --batch --no-tty --pinentry-mode loopback"
           fi
 
       - name: Upload Source Package to Launchpad PPA
