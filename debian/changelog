@@ -1,4 +1,4 @@
-power-monitor (1.0.0-1) resolute; urgency=medium
+power-monitor (1.0.0) resolute; urgency=medium
 
   * Initial community release.
   * Native GTK3 interface with horizontal-only Cairo vector charts.
