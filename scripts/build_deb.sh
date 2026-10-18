@@ -37,7 +37,7 @@ Version: 1.0.0-1
 Section: utils
 Priority: optional
 Architecture: all
-Maintainer: Beno Labs <support@benolabs.ai>
+Maintainer: Beno Labs <rla3rd@gmail.com>
 Depends: python3, python3-gi, gir1.2-gtk-3.0, gir1.2-ayatanaappindicator3-0.1, python3-cairo, lm-sensors
 Description: Hardware Power & Voltage Telemetry Monitor with Desktop Panel Indicator
  Real-time hardware telemetry tool for PC builders, overclockers, and multi-GPU

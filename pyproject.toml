@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.8"
 license = {text = "GPL-3.0-or-later"}
 authors = [
-    {name = "Beno Labs", email = "support@benolabs.ai"}
+    {name = "Beno Labs", email = "rla3rd@gmail.com"}
 ]
 keywords = ["hardware", "power", "gpu", "voltage", "telemetry", "atx", "sensors"]
 

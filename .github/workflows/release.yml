@@ -60,7 +60,7 @@ jobs:
       - name: Build & Sign Debian Source Package
         env:
           DEBEMAIL: rla3rd@gmail.com
-          DEBFULLNAME: "Richard Albright"
+          DEBFULLNAME: "Beno Labs"
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
         run: |
           if [ -n "$GPG_PASSPHRASE" ]; then

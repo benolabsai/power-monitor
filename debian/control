@@ -1,7 +1,7 @@
 Source: power-monitor
 Section: utils
 Priority: optional
-Maintainer: Beno Labs <support@benolabs.ai>
+Maintainer: Beno Labs <rla3rd@gmail.com>
 Build-Depends: debhelper-compat (= 13), python3-all, python3-setuptools, dh-python
 Standards-Version: 4.6.2
 Homepage: https://github.com/benolabsai/power-monitor
