@@ -1,12 +1,12 @@
 """
-Native GTK3 GUI Window with Cairo Vector Charts.
-Features horizontally-resizable charts with locked vertical heights,
-multi-GPU and CPU package power tracking, and automatic desktop theme synchronization.
+Native GTK3 GUI Window with Unified Theme-Aware Cairo Vector Charts.
+Both charts adhere to the exact same GTK theme color system, ensuring
+cohesive visual hierarchy across light, dark, and custom desktop accents.
 """
 
 import time
 from collections import deque
-from typing import Dict, List, Any, Optional, Callable
+from typing import Dict, List, Any, Optional, Callable, Tuple
 
 import gi
 gi.require_version("Gtk", "3.0")
@@ -44,7 +44,7 @@ window {
 .hero-wattage {
     font-size: 26pt;
     font-weight: 800;
-    color: @theme_fg_color;
+    color: @theme_selected_bg_color;
 }
 .status-pill {
     padding: 2px 10px;
@@ -97,14 +97,62 @@ window {
 }
 """
 
-CPU_COLOR = (0.96, 0.62, 0.13)  # Amber / Orange (#f59e0b) for CPU Package
+def to_hex(rgb: Tuple[float, float, float]) -> str:
+    return f"#{int(max(0, min(1, rgb[0]))*255):02x}{int(max(0, min(1, rgb[1]))*255):02x}{int(max(0, min(1, rgb[2]))*255):02x}"
 
-GPU_COLORS = [
-    (0.20, 0.75, 0.98),  # GPU 0: Vibrant Cyan (#33befa)
-    (0.70, 0.35, 0.98),  # GPU 1: Vibrant Purple (#b359fa)
-    (0.22, 0.82, 0.64),  # GPU 2: Emerald Green (#34d399)
-    (0.93, 0.28, 0.60),  # GPU 3: Rose (#ec4899)
-]
+class ThemePalette:
+    """Dynamically resolves a unified, high-contrast palette from the active GTK style context."""
+    @staticmethod
+    def resolve(widget: Gtk.Widget) -> Dict[str, Any]:
+        ctx = widget.get_style_context()
+
+        def lookup(name: str, fallback: Tuple[float, float, float]) -> Tuple[float, float, float]:
+            ok, c = ctx.lookup_color(name)
+            if ok and (c.red + c.green + c.blue) > 0.05:
+                return (c.red, c.green, c.blue)
+            return fallback
+
+        # Theme core tokens
+        accent = lookup("theme_selected_bg_color", (0.22, 0.74, 0.97))
+        warning = lookup("warning_color", (0.95, 0.60, 0.15))
+        success = lookup("success_color", (0.18, 0.78, 0.44))
+        error = lookup("error_color", (0.93, 0.28, 0.40))
+        fg = ctx.get_color(Gtk.StateFlags.NORMAL)
+        fg_col = (fg.red, fg.green, fg.blue)
+
+        # Unified Hero / Primary Metric color for both charts:
+        # Chart 1 uses this for the +12V Rail curve
+        # Chart 2 uses this for the Total System Wattage curve
+        primary = accent
+
+        # CPU Package curve uses theme warning/amber
+        cpu = warning
+
+        # Ensure GPU 0 is unmistakably distinct from primary (Total) and CPU:
+        dist_to_blue = abs(primary[0] - 0.1) + abs(primary[2] - 0.9)
+        if dist_to_blue < 0.6:
+            # Primary is blue/cyan -> GPU 0 is vibrant Emerald/Mint
+            gpu0 = (0.10, 0.82, 0.60)
+        else:
+            # Primary is orange/warm -> GPU 0 is electric Cyan/Sky
+            gpu0 = (0.12, 0.72, 0.98)
+
+        gpu1 = (0.72, 0.38, 0.98)  # Violet
+        gpu2 = error               # Theme Error / Rose
+        gpu3 = (0.23, 0.51, 0.96)  # Royal Blue
+
+        return {
+            "primary": primary,
+            "primary_hex": to_hex(primary),
+            "cpu": cpu,
+            "cpu_hex": to_hex(cpu),
+            "gpus": [gpu0, gpu1, gpu2, gpu3],
+            "gpu_hexes": [to_hex(gpu0), to_hex(gpu1), to_hex(gpu2), to_hex(gpu3)],
+            "success": success,
+            "warning": warning,
+            "error": error,
+            "fg": fg_col,
+        }
 
 def get_cpu_model():
     try:
@@ -165,7 +213,8 @@ class MainWindow(Gtk.Window):
             scheme = settings.get_string("color-scheme")
             gtk_settings = Gtk.Settings.get_default()
             gtk_settings.set_property("gtk-application-prefer-dark-theme", scheme == "prefer-dark")
-            self.queue_draw()
+            self.graph_area_v.queue_draw()
+            self.graph_area_w.queue_draw()
         except Exception:
             pass
 
@@ -243,7 +292,7 @@ class MainWindow(Gtk.Window):
         self.stats_12v_lbl.get_style_context().add_class("metric-desc")
         val_row.pack_end(self.stats_12v_lbl, True, True, 0)
 
-        # Cairo Voltage Graph: Expands Horizontally, Locked Vertically (85px)
+        # Cairo Voltage Graph
         self.graph_area_v = Gtk.DrawingArea()
         self.graph_area_v.set_size_request(-1, 85)
         self.graph_area_v.set_hexpand(True)
@@ -259,7 +308,7 @@ class MainWindow(Gtk.Window):
         wattage_frame.set_shadow_type(Gtk.ShadowType.NONE)
         wattage_frame.set_hexpand(True)
         wattage_frame.set_vexpand(False)
-        wattage_frame.get_style_context().add_class("card")
+        wattage_frame.get_style_context().add_class("hero-card")
         main_box.pack_start(wattage_frame, False, True, 0)
 
         wattage_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
@@ -271,7 +320,7 @@ class MainWindow(Gtk.Window):
         wattage_box.pack_start(w_top, False, False, 0)
 
         lbl_w_tag = Gtk.Label(label="POWER CONSUMPTION (CPU, PER-GPU & TOTAL WATTAGE)", xalign=0)
-        lbl_w_tag.get_style_context().add_class("metric-header")
+        lbl_w_tag.get_style_context().add_class("hero-title")
         w_top.pack_start(lbl_w_tag, True, True, 0)
 
         self.stats_pwr_peak_lbl = Gtk.Label(label="Peak: -- W", xalign=1)
@@ -289,7 +338,7 @@ class MainWindow(Gtk.Window):
         self.legend_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         w_val_row.pack_end(self.legend_box, True, True, 0)
 
-        # Cairo Multi-Line Wattage Graph: Expands Horizontally, Locked Vertically (110px)
+        # Cairo Multi-Line Wattage Graph
         self.graph_area_w = Gtk.DrawingArea()
         self.graph_area_w.set_size_request(-1, 110)
         self.graph_area_w.set_hexpand(True)
@@ -402,6 +451,8 @@ class MainWindow(Gtk.Window):
         self.graph_area_w.queue_draw()
 
     def update_telemetry(self, stats: Dict[str, Any]):
+        palette = ThemePalette.resolve(self)
+
         # 1. Update 12V Rail
         v12 = stats.get("12v")
         v12_src = stats.get("12v_source", "")
@@ -461,22 +512,24 @@ class MainWindow(Gtk.Window):
         self.val_total_pwr_lbl.set_text(f"{total_pwr:.1f} W")
         self.stats_pwr_peak_lbl.set_text(f"Peak Total: {self.max_total_pwr:.1f} W")
 
-        # Dynamic Legend
+        # Dynamic Legend with Theme-Derived Colors
         for child in self.legend_box.get_children():
             self.legend_box.remove(child)
 
+        # Total System Power: Uses Primary Theme Accent (#primary_hex)
         lbl_tot = Gtk.Label(xalign=1)
-        lbl_tot.set_markup(f"<b><span foreground='#38bdf8'>■ Total:</span></b> {total_pwr:.1f} W")
+        lbl_tot.set_markup(f"<b><span foreground='{palette['primary_hex']}'>■ Total:</span></b> {total_pwr:.1f} W")
         self.legend_box.pack_start(lbl_tot, False, False, 4)
 
+        # CPU Package Power: Uses Theme Warning/Gold
         if cpu_pwr is not None:
             lbl_cpu = Gtk.Label(xalign=1)
-            lbl_cpu.set_markup(f"<b><span foreground='#f59e0b'>■ CPU:</span></b> {cpu_pwr:.1f} W")
+            lbl_cpu.set_markup(f"<b><span foreground='{palette['cpu_hex']}'>■ CPU:</span></b> {cpu_pwr:.1f} W")
             self.legend_box.pack_start(lbl_cpu, False, False, 4)
 
+        # Per-GPU lines: High contrast against Total and CPU
         for gpu in gpus:
-            color = GPU_COLORS[gpu["idx"] % len(GPU_COLORS)]
-            hex_c = f"#{int(color[0]*255):02x}{int(color[1]*255):02x}{int(color[2]*255):02x}"
+            hex_c = palette["gpu_hexes"][gpu["idx"] % len(palette["gpu_hexes"])]
             lbl_g = Gtk.Label(xalign=1)
             lbl_g.set_markup(f"<b><span foreground='{hex_c}'>■ GPU {gpu['idx']}:</span></b> {gpu['power']:.1f} W")
             self.legend_box.pack_start(lbl_g, False, False, 4)
@@ -581,11 +634,13 @@ class MainWindow(Gtk.Window):
         if w < 10 or h < 10:
             return False
 
-        style_context = widget.get_style_context()
-        fg_color = style_context.get_color(Gtk.StateFlags.NORMAL)
-        sel_color = style_context.get_color(Gtk.StateFlags.SELECTED)
+        palette = ThemePalette.resolve(widget)
+        fg = palette["fg"]
+        primary = palette["primary"]
+        success = palette["success"]
 
-        cr.set_source_rgba(fg_color.red, fg_color.green, fg_color.blue, 0.04)
+        # Background fill
+        cr.set_source_rgba(fg[0], fg[1], fg[2], 0.04)
         cr.rectangle(0, 0, w, h)
         cr.fill()
 
@@ -599,23 +654,23 @@ class MainWindow(Gtk.Window):
         cr.set_line_width(1.0)
         cr.set_dash([3, 4], 0)
 
-        # 12.6V Max
+        # 12.6V Max reference line
         y_12_6 = to_y(12.6)
-        cr.set_source_rgba(fg_color.red, fg_color.green, fg_color.blue, 0.18)
+        cr.set_source_rgba(fg[0], fg[1], fg[2], 0.16)
         cr.move_to(0, y_12_6)
         cr.line_to(w, y_12_6)
         cr.stroke()
 
-        # 12.0V Target line (Green)
+        # 12.0V Target nominal line (Theme Success / Green)
         y_12_0 = to_y(12.0)
-        cr.set_source_rgba(0.18, 0.63, 0.26, 0.60)
+        cr.set_source_rgba(success[0], success[1], success[2], 0.65)
         cr.move_to(0, y_12_0)
         cr.line_to(w, y_12_0)
         cr.stroke()
 
-        # 11.4V Min
+        # 11.4V Min reference line
         y_11_4 = to_y(11.4)
-        cr.set_source_rgba(fg_color.red, fg_color.green, fg_color.blue, 0.18)
+        cr.set_source_rgba(fg[0], fg[1], fg[2], 0.16)
         cr.move_to(0, y_11_4)
         cr.line_to(w, y_11_4)
         cr.stroke()
@@ -633,19 +688,29 @@ class MainWindow(Gtk.Window):
                 y = max(2, min(h - 2, to_y(val)))
                 coords.append((x, y))
 
-            cr.set_source_rgba(sel_color.red, sel_color.green, sel_color.blue, 0.95)
-            cr.set_line_width(2.2)
+            # Translucent curve fill
+            cr.move_to(coords[0][0], h)
+            for pt in coords:
+                cr.line_to(pt[0], pt[1])
+            cr.line_to(coords[-1][0], h)
+            cr.close_path()
+            cr.set_source_rgba(primary[0], primary[1], primary[2], 0.10)
+            cr.fill()
 
+            # Main +12V Rail curve (Theme Primary Accent)
+            cr.set_source_rgba(primary[0], primary[1], primary[2], 0.95)
+            cr.set_line_width(2.2)
             cr.move_to(coords[0][0], coords[0][1])
             for pt in coords[1:]:
                 cr.line_to(pt[0], pt[1])
             cr.stroke()
 
+            # Leading dot
             last_x, last_y = coords[-1]
             cr.arc(last_x, last_y, 4.0, 0, 2 * 3.14159)
-            cr.set_source_rgba(sel_color.red, sel_color.green, sel_color.blue, 1.0)
+            cr.set_source_rgba(primary[0], primary[1], primary[2], 1.0)
             cr.fill_preserve()
-            cr.set_source_rgba(fg_color.red, fg_color.green, fg_color.blue, 0.8)
+            cr.set_source_rgba(fg[0], fg[1], fg[2], 0.8)
             cr.set_line_width(1.0)
             cr.stroke()
 
@@ -657,10 +722,14 @@ class MainWindow(Gtk.Window):
         if w < 10 or h < 10:
             return False
 
-        style_context = widget.get_style_context()
-        fg_color = style_context.get_color(Gtk.StateFlags.NORMAL)
+        palette = ThemePalette.resolve(widget)
+        fg = palette["fg"]
+        primary = palette["primary"]  # Shared Primary Theme Accent
+        cpu_col = palette["cpu"]      # Theme Amber/Gold
+        gpu_cols = palette["gpus"]    # Distinct GPU colors
 
-        cr.set_source_rgba(fg_color.red, fg_color.green, fg_color.blue, 0.04)
+        # Background fill matching Chart 1
+        cr.set_source_rgba(fg[0], fg[1], fg[2], 0.04)
         cr.rectangle(0, 0, w, h)
         cr.fill()
 
@@ -671,9 +740,10 @@ class MainWindow(Gtk.Window):
             ratio = val / y_max
             return h - (ratio * (h - 10)) - 5
 
+        # Horizontal reference lines matching Chart 1 styling
         cr.set_line_width(1.0)
         cr.set_dash([3, 4], 0)
-        cr.set_source_rgba(fg_color.red, fg_color.green, fg_color.blue, 0.15)
+        cr.set_source_rgba(fg[0], fg[1], fg[2], 0.16)
 
         for step in [0.25, 0.50, 0.75, 1.0]:
             y_val = y_max * step
@@ -684,7 +754,7 @@ class MainWindow(Gtk.Window):
 
         cr.set_dash([], 0)
 
-        # 1. Total Power fill & line (Cyan gradient)
+        # 1. Total System Power: Uses Primary Theme Accent (Same color as 12V Rail curve!)
         tot_pts = list(self.history_total_pwr)
         if len(tot_pts) >= 2:
             x_step = w / 59.0
@@ -696,22 +766,33 @@ class MainWindow(Gtk.Window):
                 y = max(2, min(h - 2, to_y(val)))
                 coords.append((x, y))
 
+            # Translucent fill
             cr.move_to(coords[0][0], h)
             for pt in coords:
                 cr.line_to(pt[0], pt[1])
             cr.line_to(coords[-1][0], h)
             cr.close_path()
-            cr.set_source_rgba(0.22, 0.74, 0.97, 0.14)
+            cr.set_source_rgba(primary[0], primary[1], primary[2], 0.10)
             cr.fill()
 
-            cr.set_source_rgba(0.22, 0.74, 0.97, 0.90)
+            # Stroke Total curve
+            cr.set_source_rgba(primary[0], primary[1], primary[2], 0.95)
             cr.set_line_width(2.5)
             cr.move_to(coords[0][0], coords[0][1])
             for pt in coords[1:]:
                 cr.line_to(pt[0], pt[1])
             cr.stroke()
 
-        # 2. CPU Package Power Curve (Amber / Orange)
+            # Leading dot
+            last_x, last_y = coords[-1]
+            cr.arc(last_x, last_y, 4.0, 0, 2 * 3.14159)
+            cr.set_source_rgba(primary[0], primary[1], primary[2], 1.0)
+            cr.fill_preserve()
+            cr.set_source_rgba(fg[0], fg[1], fg[2], 0.8)
+            cr.set_line_width(1.0)
+            cr.stroke()
+
+        # 2. CPU Package Power Curve (Theme Warning / Gold)
         cpu_pts = list(self.history_cpu_pwr)
         if len(cpu_pts) >= 2:
             x_step = w / 59.0
@@ -723,7 +804,7 @@ class MainWindow(Gtk.Window):
                 y = max(2, min(h - 2, to_y(val)))
                 coords.append((x, y))
 
-            cr.set_source_rgba(CPU_COLOR[0], CPU_COLOR[1], CPU_COLOR[2], 0.95)
+            cr.set_source_rgba(cpu_col[0], cpu_col[1], cpu_col[2], 0.95)
             cr.set_line_width(1.8)
             cr.move_to(coords[0][0], coords[0][1])
             for pt in coords[1:]:
@@ -734,11 +815,11 @@ class MainWindow(Gtk.Window):
             cr.arc(last_x, last_y, 3.5, 0, 2 * 3.14159)
             cr.fill()
 
-        # 3. Per-GPU Individual Curves
+        # 3. Per-GPU Individual Curves (Guaranteed distinct from Total and CPU)
         for gpu_idx, pts_deque in self.history_gpu_pwr.items():
             pts = list(pts_deque)
             if len(pts) >= 2:
-                color = GPU_COLORS[gpu_idx % len(GPU_COLORS)]
+                color = gpu_cols[gpu_idx % len(gpu_cols)]
                 x_step = w / 59.0
                 start_idx = 60 - len(pts)
 
