@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="power-monitor",
-    version="1.0.0",
+    version="1.0.1",
     description="Universal Hardware Power & Voltage Telemetry Monitor with Desktop Panel Indicator",
     long_description=open("README.md").read() if open("README.md") else "",
     long_description_content_type="text/markdown",

@@ -1,3 +1,12 @@
+power-monitor (1.0.1) resolute; urgency=medium
+
+  * Add threshold-driven immediate event logging on +12V rail sags (<11.40V, <11.00V).
+  * Add per-board Super I/O divider calibration (--cal-12v) and persistent config.
+  * Ultra-low overhead direct NVML C-FFI GPU probing (eliminating nvidia-smi forks).
+  * Zero-noise daemon mode: completely silent while operating within normal bounds.
+
+ -- Beno Labs <rla3rd@gmail.com>  Sun, 18 Oct 2026 14:35:00 -0400
+
 power-monitor (1.0.0) resolute; urgency=medium
 
   * Initial community release.

@@ -2,10 +2,13 @@
 Motherboard Super I/O & Sensor Pin Database
 Provides out-of-the-box +12V rail mapping and heuristic detection so users
 do not need custom /etc/sensors.d/ configuration files.
+Includes persistent per-board multimeter calibration loading and saving.
 """
 
 import os
 import glob
+import json
+import time
 from typing import Optional, Dict, Any, Tuple
 
 # Database of verified motherboard DMI profiles for the ATX +12V rail
@@ -122,3 +125,78 @@ def detect_heuristic_12v() -> Optional[Dict[str, Any]]:
                     }
 
     return None
+
+def get_calibration_path() -> str:
+    """Returns system or user-specific path to calibration configuration file."""
+    sys_dir = "/etc/power-monitor"
+    if os.path.exists(sys_dir) and os.access(sys_dir, os.W_OK):
+        return os.path.join(sys_dir, "calibration.json")
+    user_dir = os.path.expanduser("~/.config/power-monitor")
+    return os.path.join(user_dir, "calibration.json")
+
+def load_calibration() -> Tuple[float, float, Optional[Dict[str, Any]]]:
+    """
+    Loads custom +12V rail calibration multiplier and offset.
+    Resolution priority:
+      1. Environment variables (POWER_MONITOR_V12_MULTIPLIER, POWER_MONITOR_V12_OFFSET)
+      2. /etc/power-monitor/calibration.json
+      3. ~/.config/power-monitor/calibration.json
+    Returns (multiplier, offset, metadata_dict).
+    """
+    # 1. Environment variables
+    env_mult = os.environ.get("POWER_MONITOR_V12_MULTIPLIER")
+    env_off = os.environ.get("POWER_MONITOR_V12_OFFSET")
+    if env_mult is not None:
+        try:
+            m = float(env_mult)
+            o = float(env_off) if env_off else 0.0
+            return m, o, {"source": "environment_variable"}
+        except ValueError:
+            pass
+
+    # 2. Config files
+    candidates = [
+        "/etc/power-monitor/calibration.json",
+        os.path.expanduser("~/.config/power-monitor/calibration.json")
+    ]
+    for c in candidates:
+        if os.path.exists(c):
+            try:
+                with open(c) as f:
+                    data = json.load(f)
+                m = float(data.get("v12_multiplier", 1.0))
+                o = float(data.get("v12_offset", 0.0))
+                return m, o, data
+            except Exception:
+                pass
+
+    return 1.0, 0.0, None
+
+def save_calibration(target_volts: float, raw_volts: float, sensor_info: str) -> Tuple[float, str]:
+    """
+    Computes and persists the calibration multiplier based on a physical multimeter reading.
+    Formula: multiplier = target_volts / raw_volts
+    """
+    if raw_volts <= 0.0:
+        multiplier = 1.0
+    else:
+        multiplier = target_volts / raw_volts
+
+    target_path = get_calibration_path()
+    os.makedirs(os.path.dirname(target_path), exist_ok=True)
+
+    vendor, board = get_dmi_info()
+    data = {
+        "v12_multiplier": round(multiplier, 6),
+        "v12_offset": 0.0,
+        "calibrated_against_volts": round(target_volts, 3),
+        "measured_base_volts": round(raw_volts, 3),
+        "motherboard": f"{vendor} {board}",
+        "sensor_source": sensor_info,
+        "updated_at": time.strftime("%Y-%m-%d %H:%M:%S")
+    }
+
+    with open(target_path, "w") as f:
+        json.dump(data, f, indent=2)
+
+    return multiplier, target_path

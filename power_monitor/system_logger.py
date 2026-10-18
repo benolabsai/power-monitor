@@ -1,10 +1,8 @@
 """
 System Log (Journald / Syslog) Telemetry Reporter.
-Logs power anomalies, voltage sags, and heartbeats directly into the Linux system journal.
-Integrates natively with:
-  journalctl -u power-monitor
-  journalctl -p warning -u power-monitor
-  journalctl -u power-monitor -b -1  (post-mortem previous boot analysis)
+Zero-noise when operating within normal bounds.
+Immediately event-logs to systemd-journald and stdout the instant hardware
+crosses specific thresholds (voltage sags, brownout collapses, thermal limits).
 """
 
 import sys
@@ -22,11 +20,36 @@ SD_INFO    = "<6>"
 SD_DEBUG   = "<7>"
 
 class SystemJournalLogger:
-    def __init__(self, heartbeat_interval: float = 30.0):
+    """
+    Event-driven logger that stays completely silent while hardware operates within normal bounds.
+    The exact millisecond a metric crosses a safety threshold (e.g. +12V < 11.40V), an immediate event
+    is published and flushed to the system journal so a hard crash/reboot never misses the cause.
+    """
+    def __init__(
+        self,
+        sag_warning_threshold: float = 11.40,
+        sag_critical_threshold: float = 11.00,
+        recovery_threshold: float = 11.50,
+        rapid_drop_threshold: float = 0.35,
+        heartbeat_interval: float = 300.0, # Slow 5-minute keepalive when healthy; set <= 0 to disable
+    ):
+        self.sag_warning_threshold = sag_warning_threshold
+        self.sag_critical_threshold = sag_critical_threshold
+        self.recovery_threshold = recovery_threshold
+        self.rapid_drop_threshold = rapid_drop_threshold
         self.heartbeat_interval = heartbeat_interval
-        self.last_heartbeat_time = 0.0
-        self.last_reported_v12: Optional[float] = None
-        self.last_rail_state: str = "HEALTHY"
+
+        self.last_heartbeat_time = time.time()
+        self.prev_v12: Optional[float] = None
+        self.rail_state: str = "HEALTHY" # "HEALTHY", "WARNING_LOW", "CRITICAL_LOW", "WARNING_HIGH"
+        
+        # Sag episode tracking
+        self.in_sag_episode = False
+        self.sag_start_time = 0.0
+        self.sag_min_v12 = float("inf")
+        self.last_logged_sag_min = float("inf")
+
+        # Highest wattage tracking
         self.highest_wattage_seen = 0.0
 
     def log(self, priority: str, message: str):
@@ -36,9 +59,9 @@ class SystemJournalLogger:
 
     def inspect_frame(self, stats: Dict[str, Any]):
         """
-        Analyzes live telemetry against ATX hardware specifications.
-        Immediately emits system journal events on anomalies, rail sags, and high load steps,
-        plus a periodic summary heartbeat.
+        Inspects live frame.
+        ZERO log output when operating within normal bounds.
+        Immediate event logging on threshold crossings or rapid voltage drops.
         """
         now = time.time()
         v12 = stats.get("12v")
@@ -46,52 +69,85 @@ class SystemJournalLogger:
         gpu_pwr_total = sum(g.get("power", 0.0) for g in gpus)
         cpu_pwr = stats.get("cpu_power")
         total_pwr = gpu_pwr_total + (cpu_pwr if cpu_pwr is not None else 0.0)
-        cpu_temp = stats.get("cpu_temp")
+        
+        gpu_detail = ", ".join([f"GPU{g['idx']}:{g['power']:.0f}W" for g in gpus]) or "no GPUs"
 
-        # 1. ATX +12V Rail Stability Analysis (11.40V - 12.60V Margin)
         if v12 is not None:
-            if v12 < 11.00:
-                current_state = "CRITICAL_LOW"
-                if self.last_rail_state != current_state:
+            # 1. Rapid Cliff Drop Detection (e.g. -0.4V drop between successive checks)
+            if self.prev_v12 is not None:
+                drop = self.prev_v12 - v12
+                if drop >= self.rapid_drop_threshold and v12 < self.recovery_threshold:
+                    self.log(
+                        SD_WARNING,
+                        f"RAPID SAG DETECTED: +12V plummeted from {self.prev_v12:.2f}V to {v12:.2f}V (-{drop:.2f}V plunge!) under {total_pwr:.1f}W load ({gpu_detail})"
+                    )
+
+            # 2. Threshold Crossing: Critical Undervoltage (< 11.00V)
+            if v12 < self.sag_critical_threshold:
+                if not self.in_sag_episode:
+                    self.in_sag_episode = True
+                    self.sag_start_time = now
+                    self.sag_min_v12 = v12
+                    self.last_logged_sag_min = v12
+                else:
+                    self.sag_min_v12 = min(self.sag_min_v12, v12)
+
+                # Log immediately on state entry or if deepening by > 0.1V
+                if self.rail_state != "CRITICAL_LOW" or (self.last_logged_sag_min - v12 >= 0.10):
+                    self.rail_state = "CRITICAL_LOW"
+                    self.last_logged_sag_min = v12
                     self.log(
                         SD_CRIT,
-                        f"CRITICAL RAIL UNDERVOLTAGE: +12V rail collapsed to {v12:.2f}V! (System load: {total_pwr:.1f}W). Imminent brownout/reboot risk."
+                        f"CRITICAL RAIL COLLAPSE: +12V collapsed to {v12:.2f}V! (<{self.sag_critical_threshold:.2f}V). Imminent brownout/UVP trip risk! (System Draw: {total_pwr:.1f}W, {gpu_detail})"
                     )
-            elif v12 < 11.40:
-                current_state = "WARNING_LOW"
-                if self.last_rail_state != current_state:
+
+            # 3. Threshold Crossing: ATX Spec Sag (< 11.40V)
+            elif v12 < self.sag_warning_threshold:
+                if not self.in_sag_episode:
+                    self.in_sag_episode = True
+                    self.sag_start_time = now
+                    self.sag_min_v12 = v12
+                    self.last_logged_sag_min = v12
+                else:
+                    self.sag_min_v12 = min(self.sag_min_v12, v12)
+
+                # Log immediately on state entry or if deepening by > 0.1V
+                if self.rail_state != "WARNING_LOW" or (self.last_logged_sag_min - v12 >= 0.10):
+                    self.rail_state = "WARNING_LOW"
+                    self.last_logged_sag_min = v12
                     self.log(
                         SD_WARNING,
-                        f"ATX 12V RAIL SAG: Voltage dipped below spec margin to {v12:.2f}V (<11.40V min). Total Draw: {total_pwr:.1f}W."
+                        f"ATX RAIL SAG: +12V dipped below spec to {v12:.2f}V (<{self.sag_warning_threshold:.2f}V). Total Draw: {total_pwr:.1f}W ({gpu_detail})"
                     )
+
+            # 4. Overvoltage (> 12.60V)
             elif v12 > 12.60:
-                current_state = "WARNING_HIGH"
-                if self.last_rail_state != current_state:
+                if self.rail_state != "WARNING_HIGH":
+                    self.rail_state = "WARNING_HIGH"
                     self.log(
                         SD_WARNING,
-                        f"ATX 12V OVERVOLTAGE: Rail exceeded spec margin to {v12:.2f}V (>12.60V max)."
+                        f"ATX OVERVOLTAGE: +12V rail exceeded spec to {v12:.2f}V (>12.60V max). Total Draw: {total_pwr:.1f}W"
                     )
+
+            # 5. Recovery Event (voltage rises back above recovery threshold, e.g. 11.50V)
+            elif self.in_sag_episode and v12 >= self.recovery_threshold:
+                duration_ms = (now - self.sag_start_time) * 1000.0
+                lowest_v = self.sag_min_v12
+                self.log(
+                    SD_NOTICE,
+                    f"RAIL RECOVERED: +12V recovered to {v12:.2f}V (sag episode lasted {duration_ms:.0f}ms, lowest dip reached was {lowest_v:.2f}V). System Draw: {total_pwr:.1f}W"
+                )
+                self.in_sag_episode = False
+                self.sag_min_v12 = float("inf")
+                self.last_logged_sag_min = float("inf")
+                self.rail_state = "HEALTHY"
+
             else:
-                current_state = "HEALTHY"
-                if self.last_rail_state != "HEALTHY":
-                    self.log(
-                        SD_NOTICE,
-                        f"ATX +12V Rail recovered to normal operating margin ({v12:.2f}V)."
-                    )
+                self.rail_state = "HEALTHY"
 
-            self.last_rail_state = current_state
+            self.prev_v12 = v12
 
-        # 2. Significant Wattage Step / Peak Detection
-        if total_pwr > (self.highest_wattage_seen + 50.0):
-            self.highest_wattage_seen = total_pwr
-            v_str = f"{v12:.2f}V" if v12 is not None else "--"
-            breakdown = f"GPUs: {gpu_pwr_total:.1f}W" + (f", CPU: {cpu_pwr:.1f}W" if cpu_pwr is not None else "")
-            self.log(
-                SD_INFO,
-                f"New peak system draw: {total_pwr:.1f}W ({breakdown}, 12V Rail: {v_str})"
-            )
-
-        # 3. GPU & CPU Thermal Warnings
+        # 6. Thermal Critical Thresholds (Only when overheating)
         for g in gpus:
             if g.get("temp", 0) >= 88.0:
                 self.log(
@@ -99,20 +155,20 @@ class SystemJournalLogger:
                     f"Thermal Warning: GPU {g.get('idx')} ({g.get('name')}) reached {g.get('temp'):.0f}°C under {g.get('power', 0):.1f}W draw."
                 )
 
+        cpu_temp = stats.get("cpu_temp")
         if cpu_temp is not None and cpu_temp >= 90.0:
             self.log(
                 SD_WARNING,
                 f"Thermal Warning: CPU reached {cpu_temp:.1f}°C."
             )
 
-        # 4. Periodic Heartbeat Summary (every 30s)
-        if (now - self.last_heartbeat_time) >= self.heartbeat_interval:
+        # 7. Slow Keepalive Heartbeat (Only every 5 min if healthy, or user configured)
+        if self.heartbeat_interval > 0 and (now - self.last_heartbeat_time) >= self.heartbeat_interval:
             self.last_heartbeat_time = now
             v12_str = f"{v12:.2f}V" if v12 is not None else "--"
             cpu_p_str = f"({cpu_pwr:.0f}W)" if cpu_pwr is not None else ""
             cpu_s = f"{cpu_temp:.0f}°C{cpu_p_str}" if cpu_temp is not None else "--"
-            gpu_summary = ", ".join([f"GPU{g['idx']}:{g['power']:.0f}W({g['temp']:.0f}°C)" for g in gpus]) or "No active discrete GPUs"
             self.log(
                 SD_INFO,
-                f"Status: +12V={v12_str} | Total={total_pwr:.1f}W | CPU={cpu_s} | {gpu_summary}"
+                f"Keepalive: +12V={v12_str} (in bounds) | Total={total_pwr:.1f}W | CPU={cpu_s} | {gpu_detail}"
             )
